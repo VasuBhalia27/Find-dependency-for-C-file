@@ -1,78 +1,58 @@
-import re,os
+import os
+import re
 
-dependencies_buffer = []
-dependencies_path_buffer = []
-all_dependencies_paths= []
-final_result = []
-#Function definations --------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
-
-
-def find_includes(source_module_Fpath):
-    # Regex pattern to match #include directives, whether it's in angle brackets or quotes
-    include_pattern = re.compile(r'#include\s+[<"](.*?)[>"]')
-    
-    # List to store the included files
-    included_files = []
-
+def find_includes(file_path):
+    include_pattern = re.compile(r'#include\s+[<"]([^">]+)[">]')
+    includes = []
     try:
-        # Open the C file
-        with open(source_module_Fpath, 'r') as file:
+        with open(file_path, 'r') as file:
             for line in file:
-                match = include_pattern.search(line)
+                match = include_pattern.match(line.strip())
                 if match:
-                    # Extract the included file name
-                    included_files.append(match.group(1))
-                    
-        return included_files
-    except FileNotFoundError:
-        print(f"The file {source_module_Fpath} was not found.")
-        return []
+                    includes.append(match.group(1))
     except Exception as e:
-        print(f"An error occurred: {e}")
-        return []
-    
-def find_file(directory, filename):
-    for root, dirs, files in os.walk(directory):  # Traverse the directory
+        print(f"Error reading {file_path}: {e}")
+    return includes
+
+def find_file(filename, search_path):
+    for root, dirs, files in os.walk(search_path):
         if filename in files:
-            return os.path.join(root, filename)  # Return full path if file is found
-    return None  # Return None if file not found
-
-# User inputs ----------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
+            return os.path.join(root, filename)
+    return None
 
 
+def collect_dependencies(file_path, search_path, visited=None):
+    if visited is None:
+        visited = set()
+    dependencies = []
+    abs_file_path = os.path.abspath(file_path)
+    if abs_file_path in visited:
+        return dependencies
+    visited.add(abs_file_path)
+    includes = find_includes(file_path)
+    for inc in includes:
+        inc_path = find_file(inc, search_path)
+        if inc_path:
+            abs_inc_path = os.path.abspath(inc_path)
+            if abs_inc_path not in visited:
+                dependencies.append(abs_inc_path)
+                sub_deps = collect_dependencies(abs_inc_path, search_path, visited)
+                dependencies.extend(sub_deps)
+    return dependencies
 
-source_module_Fpath = input("Enter source module path : ")
-
-Project_directory = input("Enter directory path : ")
-
-
-
-# Main Code ------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
-
-
-
-dependencies_buffer = find_includes(source_module_Fpath)
-
-for i in range(len(dependencies_buffer)):
-    current_path = find_file(Project_directory, dependencies_buffer[i])
-    if current_path:
-        dependencies_path_buffer.append(current_path)
-        all_dependencies_paths.append(current_path)
-
-
-dependencies_path_buffer = []
-dependencies_buffer = []
+if __name__ == "__main__":
+    source_module_path = input("Enter source module path: ").strip()
+    project_directory = input("Enter project directory path: ").strip()
 
 
-print("Dependencies found:", dependencies_buffer)
+    if not os.path.isfile(source_module_path):
+        print(f"Source file {source_module_path} does not exist.")
+    elif not os.path.isdir(project_directory):
+        print(f"Project directory {project_directory} does not exist.")
+    else:
 
-print("Dependencies paths:", dependencies_path_buffer)
+
+        all_dependencies = collect_dependencies(source_module_path, project_directory)
+        print("\nAll dependencies found:")
+        for dep in all_dependencies:
+            print(dep)
